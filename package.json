@@ -9,9 +9,20 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@ai-sdk/openai-compatible": "^2.0.53",
+    "@ai-sdk/react": "^3.0.215",
+    "@auth/prisma-adapter": "^2.11.2",
+    "@octokit/rest": "^22.0.1",
+    "@prisma/client": "^6.19.3",
+    "ai": "^6.0.213",
     "next": "16.2.9",
+    "next-auth": "^5.0.0-beta.31",
+    "octokit": "^5.0.5",
     "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react-diff-view": "^3.3.3",
+    "react-dom": "19.2.4",
+    "refractor": "^5.0.0",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
@@ -20,6 +31,8 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.2.9",
+    "playwright": "^1.61.1",
+    "prisma": "^6.19.3",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

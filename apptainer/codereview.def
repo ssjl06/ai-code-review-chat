@@ -1,0 +1,97 @@
+Bootstrap: docker
+From: node:20-slim
+
+# Self-contained Apptainer image: builds the Next.js standalone app at build
+# time and runs it at runtime. A single .sif file — copy it into the air-gap and
+# run. PostgreSQL and the LLM endpoint are external (run separately).
+#
+# Build (on a network-connected host):
+#   cd <project root>
+#   apptainer build --fakeroot /mnt/e/codereview.sif apptainer/codereview.def
+#
+# Run the app:
+#   apptainer run --env-file .env.production /mnt/e/codereview.sif
+# Run DB migrations once (before first start / on upgrade):
+#   apptainer run --app migrate --env-file .env.production /mnt/e/codereview.sif
+
+%files
+    package.json /build/package.json
+    package-lock.json /build/package-lock.json
+    next.config.ts /build/next.config.ts
+    tsconfig.json /build/tsconfig.json
+    postcss.config.mjs /build/postcss.config.mjs
+    eslint.config.mjs /build/eslint.config.mjs
+    prisma /build/prisma
+    public /build/public
+    src /build/src
+
+%post
+    set -eux
+    export NEXT_TELEMETRY_DISABLED=1
+    export DEBIAN_FRONTEND=noninteractive
+
+    # OpenSSL/CA certs for the Prisma engine.
+    apt-get update
+    apt-get install -y --no-install-recommends openssl ca-certificates
+    rm -rf /var/lib/apt/lists/*
+
+    cd /build
+    npm ci --legacy-peer-deps
+    npx prisma generate
+
+    # Placeholder build-time env (real values injected at runtime; none baked in).
+    export GITHUB_CLIENT_ID=build
+    export GITHUB_CLIENT_SECRET=build
+    export GITHUB_BASE_URL=https://build.invalid
+    export GITHUB_API_URL=https://build.invalid/api/v3
+    export TOKEN_ENC_KEY=build
+    export LLM_BASE_URL=http://build.invalid/v1
+    export AUTH_SECRET=build
+    export NEXT_OUTPUT_STANDALONE=1
+    npm run build
+
+    # Assemble the standalone runtime at /app.
+    mkdir -p /app
+    cp -a /build/.next/standalone/. /app/
+    cp -a /build/.next/static /app/.next/static
+    cp -a /build/public /app/public
+    cp -a /build/node_modules/.prisma /app/node_modules/.prisma
+
+    # Lean migration toolchain at /opt/migrate (Prisma CLI + schema + migrations).
+    mkdir -p /opt/migrate
+    cp -a /build/prisma /opt/migrate/prisma
+    cd /opt/migrate
+    npm init -y >/dev/null 2>&1
+    npm install --no-audit --no-fund prisma@6 @prisma/client@6
+    npx prisma generate --schema /opt/migrate/prisma/schema.prisma
+
+    # Drop build sources to keep the image lean.
+    rm -rf /build
+    npm cache clean --force >/dev/null 2>&1 || true
+
+%environment
+    export NODE_ENV=production
+    export PORT=3000
+    export HOSTNAME=0.0.0.0
+    export NEXT_TELEMETRY_DISABLED=1
+
+%runscript
+    exec node /app/server.js
+
+%startscript
+    exec node /app/server.js
+
+%apprun migrate
+    cd /opt/migrate
+    exec npx prisma migrate deploy --schema /opt/migrate/prisma/schema.prisma
+
+%labels
+    org.opencontainers.image.title AI Code Review
+    org.opencontainers.image.description Next.js app for GitHub Enterprise code review with line-by-line AI chat
+
+%help
+    AI Code Review app (Next.js standalone).
+      Run app:        apptainer run --env-file .env.production codereview.sif
+      Run migrations: apptainer run --app migrate --env-file .env.production codereview.sif
+    Requires external PostgreSQL (DATABASE_URL) and an OpenAI-compatible LLM (LLM_BASE_URL).
+    See DEPLOYMENT.md for the full environment variable list.

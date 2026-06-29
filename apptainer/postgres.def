@@ -1,0 +1,69 @@
+Bootstrap: docker
+From: postgres:16-alpine
+
+# PostgreSQL 16 packaged as an Apptainer image for the code-review app.
+# The DB binaries live in the (read-only) SIF; the data lives OUTSIDE it, in a
+# host directory bind-mounted to /pgdata. Runs as the invoking (non-root) user —
+# no daemon, no fakeroot needed.
+#
+# IMPORTANT: the host data dir must be on a real LINUX filesystem (ext4/xfs…),
+# NOT a Windows/NTFS (drvfs) mount — Postgres needs proper fsync/locking.
+
+%post
+    mkdir -p /pgdata
+    chmod 777 /pgdata
+
+%environment
+    export PGDATA=/pgdata
+    export LANG=C.UTF-8
+
+# One-time cluster initialization. Requires an empty bound /pgdata.
+%apprun initdb
+    set -e
+    if [ -s "$PGDATA/PG_VERSION" ]; then
+        echo "Already initialized at $PGDATA — skipping."
+        exit 0
+    fi
+    PW="${POSTGRES_PASSWORD:-postgres}"
+    DB_USER="${POSTGRES_USER:-postgres}"
+    DB_NAME="${POSTGRES_DB:-code_review}"
+    PWFILE="$(mktemp)"; printf '%s' "$PW" > "$PWFILE"
+    initdb -D "$PGDATA" -U "$DB_USER" -A scram-sha-256 --pwfile="$PWFILE" -E UTF8
+    rm -f "$PWFILE"
+    echo "host all all 127.0.0.1/32 scram-sha-256" >> "$PGDATA/pg_hba.conf"
+    echo "host all all ::1/128 scram-sha-256"       >> "$PGDATA/pg_hba.conf"
+    # Create the application database via a temporary socket-only server.
+    pg_ctl -D "$PGDATA" -o "-c listen_addresses='' -c unix_socket_directories=/tmp" -w start
+    PGPASSWORD="$PW" createdb -h /tmp -U "$DB_USER" "$DB_NAME" || true
+    pg_ctl -D "$PGDATA" -m fast -w stop
+    echo "Initialized cluster at $PGDATA with database '$DB_NAME'."
+
+# Long-running server (used by `apptainer instance start`).
+# The SIF is read-only, so the Unix socket must go to a writable dir (/tmp).
+%startscript
+    exec postgres -D "$PGDATA" \
+        -c listen_addresses="${PG_LISTEN:-localhost}" \
+        -c port="${PGPORT:-5432}" \
+        -c unix_socket_directories=/tmp
+
+%runscript
+    exec postgres -D "$PGDATA" \
+        -c listen_addresses="${PG_LISTEN:-localhost}" \
+        -c port="${PGPORT:-5432}" \
+        -c unix_socket_directories=/tmp
+
+%labels
+    org.opencontainers.image.title PostgreSQL 16 (code-review)
+
+%help
+    PostgreSQL 16 for the code-review app. Data lives in a host dir bound to /pgdata
+    (must be on a Linux filesystem).
+
+      Init once:  apptainer run --app initdb \
+                    --bind /srv/codereview/pgdata:/pgdata \
+                    --env POSTGRES_PASSWORD=secret --env POSTGRES_DB=code_review \
+                    postgres.sif
+      Start:      apptainer instance start \
+                    --bind /srv/codereview/pgdata:/pgdata \
+                    --env PGPORT=5432 postgres.sif pg
+      Stop:       apptainer instance stop pg

@@ -1,0 +1,21 @@
+[Unit]
+Description=Code Review PostgreSQL (Apptainer)
+# remote-fs.target ensures NFS is mounted before PGDATA is bound.
+After=network-online.target remote-fs.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=__ENVFILE__
+ExecStart=/usr/bin/apptainer run \
+  --bind ${PGDATA_HOST}:/pgdata \
+  --env PGPORT=${PGPORT} --env PG_LISTEN=${PG_LISTEN} \
+  ${PG_SIF}
+# Postgres: SIGINT = fast shutdown (SIGTERM would be a slow "smart" shutdown).
+KillSignal=SIGINT
+TimeoutStopSec=60
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

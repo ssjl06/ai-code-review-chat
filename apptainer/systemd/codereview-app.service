@@ -1,0 +1,16 @@
+[Unit]
+Description=Code Review app (Apptainer)
+After=codereview-migrate.service
+Requires=codereview-migrate.service
+
+[Service]
+Type=simple
+EnvironmentFile=__ENVFILE__
+# PORT / HOSTNAME come from the app env file (ENV_FILE).
+ExecStart=/usr/bin/apptainer run --env-file ${ENV_FILE} ${APP_SIF}
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,137 @@
+// Prisma schema for the AI Code Review tool.
+// Auth.js standard models + domain models (Thread / Message / ShareLink).
+
+generator client {
+  provider = "prisma-client-js"
+  // "native" for local dev; the debian target matches the node:20-slim runtime
+  // image (Debian bookworm / OpenSSL 3) used in the Dockerfile.
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ──────────────────────────────────────────────
+// Auth.js models
+// ──────────────────────────────────────────────
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  githubLogin   String?   @unique
+  accounts    Account[]
+  sessions    Session[]
+  threads     Thread[]
+  createdAt   DateTime  @default(now())
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  // GitHub tokens — stored AES-256-GCM encrypted (see src/server/crypto.ts).
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ──────────────────────────────────────────────
+// Domain models
+// ──────────────────────────────────────────────
+enum DiffSide {
+  LEFT // original / removed side
+  RIGHT // new / added or context side
+}
+
+enum MessageRole {
+  user
+  assistant
+  system
+}
+
+enum ThreadStatus {
+  OPEN
+  RESOLVED
+  OUTDATED // anchor line no longer present after a force-push
+}
+
+model Thread {
+  id     String @id @default(cuid())
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+
+  // PR anchor
+  repoOwner String
+  repoName  String
+  prNumber  Int
+
+  // Line anchor — the exact params GitHub's review-comment API needs.
+  filePath  String
+  line      Int
+  startLine Int?
+  side      DiffSide
+  startSide DiffSide?
+  commitSha String // PR head SHA the anchor was created against
+  diffHunk  String    @db.Text // captured hunk text: LLM context + re-anchoring
+
+  status          ThreadStatus @default(OPEN)
+  postedCommentId BigInt? // GitHub review-comment id, once posted
+
+  messages  Message[]
+  share     ShareLink?
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  @@index([userId, repoOwner, repoName, prNumber])
+}
+
+model Message {
+  id        String      @id @default(cuid())
+  thread    Thread      @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  threadId  String
+  role      MessageRole
+  content   String      @db.Text
+  model     String?
+  createdAt DateTime    @default(now())
+
+  @@index([threadId, createdAt])
+}
+
+model ShareLink {
+  id        String    @id @default(cuid())
+  token     String    @unique
+  thread    Thread    @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  threadId  String    @unique
+  createdAt DateTime  @default(now())
+  expiresAt DateTime?
+  revoked   Boolean   @default(false)
+}

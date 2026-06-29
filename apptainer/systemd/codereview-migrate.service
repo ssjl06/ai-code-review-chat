@@ -1,0 +1,17 @@
+[Unit]
+Description=Code Review DB migrations (Apptainer, one-shot)
+After=codereview-db.service
+Requires=codereview-db.service
+Before=codereview-app.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+EnvironmentFile=__ENVFILE__
+# Wait for the DB to accept TCP connections before migrating.
+# $$ escapes systemd's own variable expansion; ${PGPORT} IS expanded by systemd.
+ExecStartPre=/bin/bash -c 'for i in $$(seq 1 60); do (exec 3<>/dev/tcp/127.0.0.1/${PGPORT}) 2>/dev/null && exit 0; sleep 1; done; echo "DB not reachable on ${PGPORT}"; exit 1'
+ExecStart=/usr/bin/apptainer run --app migrate --env-file ${ENV_FILE} ${APP_SIF}
+
+[Install]
+WantedBy=multi-user.target

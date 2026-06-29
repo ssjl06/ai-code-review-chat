@@ -39,3 +39,18 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Local verification artifacts
+.playwright-mcp/
+/landing.png
+/share.png
+
+# Air-gap deploy bundle (large SIFs)
+/codereview-deploy/
+
+# keep env templates (no secrets)
+!.env.example
+!.env.production.example
+
+# verification screenshots (root)
+/*.png

@@ -1,0 +1,52 @@
+# Production compose: Postgres + one-off migration + the app.
+# Usage:
+#   docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+#
+# In an air-gapped environment, pre-load the base images (postgres:16-alpine,
+# node:20-slim) into your internal registry and adjust the image references.
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-code_review}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Runs `prisma migrate deploy` once, then exits. Uses the deps stage (has the
+  # Prisma CLI, schema and migrations).
+  migrate:
+    build:
+      context: .
+      target: deps
+    command: npx prisma migrate deploy
+    env_file: .env.production
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  app:
+    build:
+      context: .
+      target: runner
+    env_file: .env.production
+    ports:
+      - "3000:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+volumes:
+  pgdata:
