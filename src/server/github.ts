@@ -93,21 +93,64 @@ export async function getUserOctokit(userId: string): Promise<Octokit> {
 // Read helpers
 // ──────────────────────────────────────────────
 
-export async function listRepos(userId: string): Promise<RepoSummary[]> {
-  const octokit = await getUserOctokit(userId);
-  const repos = await octokit.paginate(octokit.repos.listForAuthenticatedUser, {
-    per_page: 100,
-    sort: "updated",
-    affiliation: "owner,collaborator,organization_member",
-  });
-  return repos.map((r) => ({
+// Minimal shape shared by both listing endpoints.
+interface RepoLike {
+  owner: { login: string };
+  name: string;
+  full_name: string;
+  private: boolean;
+  description: string | null;
+  updated_at?: string | null;
+}
+
+function toRepoSummary(r: RepoLike): RepoSummary {
+  return {
     owner: r.owner.login,
     name: r.name,
     fullName: r.full_name,
     private: r.private,
     description: r.description,
     updatedAt: r.updated_at ?? null,
-  }));
+  };
+}
+
+export async function listRepos(userId: string): Promise<RepoSummary[]> {
+  const octokit = await getUserOctokit(userId);
+  const byFullName = new Map<string, RepoSummary>();
+
+  // 1) GitHub App path: repos the user can access through the app's installations.
+  //    This is the reliable way to surface org repos for a GitHub App user token —
+  //    `/user/repos` alone often omits them for non-admin members.
+  try {
+    const installations = (await octokit.paginate("GET /user/installations", {
+      per_page: 100,
+    })) as Array<{ id: number }>;
+    for (const inst of installations) {
+      const repos = (await octokit.paginate(
+        "GET /user/installations/{installation_id}/repositories",
+        { installation_id: inst.id, per_page: 100 },
+      )) as RepoLike[];
+      for (const r of repos) byFullName.set(r.full_name, toRepoSummary(r));
+    }
+  } catch {
+    // Not a GitHub App, or no installations visible to this user — ignore.
+  }
+
+  // 2) OAuth/general path: repos by affiliation. Unioned with the above.
+  try {
+    const repos = await octokit.paginate(octokit.repos.listForAuthenticatedUser, {
+      per_page: 100,
+      sort: "updated",
+      affiliation: "owner,collaborator,organization_member",
+    });
+    for (const r of repos) byFullName.set(r.full_name, toRepoSummary(r));
+  } catch {
+    // ignore — installation results (if any) still stand.
+  }
+
+  return [...byFullName.values()].sort((a, b) =>
+    (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""),
+  );
 }
 
 export async function listOpenPulls(
