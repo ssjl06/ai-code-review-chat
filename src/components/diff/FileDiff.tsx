@@ -26,6 +26,8 @@ interface Props {
   models: string[];
   defaultModel: string;
   viewType?: "unified" | "split";
+  collapsed?: boolean;
+  onToggleCollapse?: () => void;
 }
 
 function sideLineKey(side: Side, line: number): string {
@@ -39,6 +41,8 @@ export default function FileDiff({
   models,
   defaultModel,
   viewType = "unified",
+  collapsed = false,
+  onToggleCollapse,
 }: Props) {
   const diffText = useMemo(() => buildUnifiedDiff(file), [file]);
   const parsed = useMemo(
@@ -52,7 +56,6 @@ export default function FileDiff({
   );
 
   const [threads, setThreads] = useState<ThreadDTO[]>(threadsForFile);
-  const [collapsed, setCollapsed] = useState(false);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [composer, setComposer] = useState<{
     changeKey: string;
@@ -185,7 +188,7 @@ export default function FileDiff({
     >
       <div className="flex items-center justify-between gap-2 bg-black/[0.03] px-3 py-2 text-sm dark:bg-white/[0.04]">
         <button
-          onClick={() => setCollapsed((c) => !c)}
+          onClick={onToggleCollapse}
           className="flex min-w-0 items-center gap-2"
           title={collapsed ? "Expand" : "Collapse"}
         >
@@ -215,6 +218,13 @@ export default function FileDiff({
             gutterType="default"
             gutterEvents={{ onClick: onGutterClick }}
             codeEvents={{ onClick: onGutterClick }}
+            renderGutter={({ inHoverState, renderDefault }) =>
+              inHoverState ? (
+                <span className="font-bold text-blue-600 dark:text-blue-400">+</span>
+              ) : (
+                renderDefault()
+              )
+            }
           >
             {(hunks) => hunks.map((h) => <Hunk key={h.content} hunk={h} />)}
           </Diff>

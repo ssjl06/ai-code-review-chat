@@ -117,6 +117,7 @@ export default function FileTree({
 }) {
   const tree = useMemo(() => buildTree(files), [files]);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [q, setQ] = useState("");
   const toggle = (p: string) =>
     setCollapsed((s) => {
       const n = new Set(s);
@@ -124,21 +125,55 @@ export default function FileTree({
       return n;
     });
 
+  const query = q.trim().toLowerCase();
+  const matches = query
+    ? files.filter((f) => f.filename.toLowerCase().includes(query))
+    : [];
+
   return (
     <nav className="text-black/80 dark:text-white/80">
       <div className="mb-1 px-2 text-xs font-semibold text-black/50 dark:text-white/50">
         {files.length} changed file{files.length === 1 ? "" : "s"}
       </div>
-      {tree.children.map((c) => (
-        <Row
-          key={c.path + (c.isFile ? "f" : "d")}
-          node={c}
-          depth={0}
-          collapsed={collapsed}
-          toggle={toggle}
-          onSelect={onSelect}
-        />
-      ))}
+      <input
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        placeholder="Filter files…"
+        className="mb-2 w-full rounded border border-black/15 bg-transparent px-2 py-1 text-xs outline-none focus:border-blue-400 dark:border-white/20"
+      />
+      {query ? (
+        matches.length === 0 ? (
+          <div className="px-2 py-1 text-xs text-black/40 dark:text-white/40">
+            No matching files
+          </div>
+        ) : (
+          matches.map((f) => (
+            <button
+              key={f.filename}
+              onClick={() => onSelect(f.filename)}
+              title={f.filename}
+              className="flex w-full items-center justify-between gap-2 rounded px-2 py-1 text-left text-xs hover:bg-black/5 dark:hover:bg-white/10"
+            >
+              <span className="truncate font-mono">{f.filename}</span>
+              <span className="shrink-0 tabular-nums text-[10px]">
+                <span className="text-green-600 dark:text-green-400">+{f.additions}</span>{" "}
+                <span className="text-red-600 dark:text-red-400">−{f.deletions}</span>
+              </span>
+            </button>
+          ))
+        )
+      ) : (
+        tree.children.map((c) => (
+          <Row
+            key={c.path + (c.isFile ? "f" : "d")}
+            node={c}
+            depth={0}
+            collapsed={collapsed}
+            toggle={toggle}
+            onSelect={onSelect}
+          />
+        ))
+      )}
     </nav>
   );
 }
