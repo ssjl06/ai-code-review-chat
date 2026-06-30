@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import type { DiffFile } from "@/lib/types";
 import type { ThreadDTO } from "@/lib/dto";
 import FileDiff from "@/components/diff/FileDiff";
+import FileTree from "@/components/diff/FileTree";
+import { fileAnchorId } from "@/lib/diff";
 
 type ViewType = "unified" | "split";
 
@@ -24,7 +26,6 @@ export default function PullDiffs({
 }: Props) {
   const [viewType, setViewType] = useState<ViewType>("split");
 
-  // Remember the user's preference across PRs (overrides the default).
   useEffect(() => {
     const saved = localStorage.getItem("diffViewType");
     if (saved === "split" || saved === "unified") setViewType(saved);
@@ -34,9 +35,15 @@ export default function PullDiffs({
     localStorage.setItem("diffViewType", v);
   }
 
+  function jumpTo(path: string) {
+    document
+      .getElementById(fileAnchorId(path))
+      ?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-end gap-1 text-xs">
+    <div>
+      <div className="mb-3 flex items-center justify-end gap-1 text-xs">
         <span className="mr-1 text-black/50 dark:text-white/50">View:</span>
         {(["unified", "split"] as const).map((v) => (
           <button
@@ -54,17 +61,33 @@ export default function PullDiffs({
         ))}
       </div>
 
-      {files.map((file) => (
-        <FileDiff
-          key={file.filename}
-          file={file}
-          prInfo={prInfo}
-          threadsForFile={threads.filter((t) => t.filePath === file.filename)}
-          models={models}
-          defaultModel={defaultModel}
-          viewType={viewType}
-        />
-      ))}
+      <div className="flex gap-4">
+        {/* GitHub-like changed-files tree */}
+        <aside className="sticky top-4 hidden max-h-[85vh] w-64 shrink-0 self-start overflow-auto rounded-lg border border-black/10 p-2 lg:block dark:border-white/15">
+          <FileTree
+            files={files.map((f) => ({
+              filename: f.filename,
+              additions: f.additions,
+              deletions: f.deletions,
+            }))}
+            onSelect={jumpTo}
+          />
+        </aside>
+
+        <div className="min-w-0 flex-1 space-y-4">
+          {files.map((file) => (
+            <FileDiff
+              key={file.filename}
+              file={file}
+              prInfo={prInfo}
+              threadsForFile={threads.filter((t) => t.filePath === file.filename)}
+              models={models}
+              defaultModel={defaultModel}
+              viewType={viewType}
+            />
+          ))}
+        </div>
+      </div>
     </div>
   );
 }

@@ -23,6 +23,11 @@ export function buildUnifiedDiff(file: DiffFile): string | null {
   return `${header.join("\n")}\n${file.patch}\n`;
 }
 
+// Stable DOM id for a file's diff section, used by the file-tree jump links.
+export function fileAnchorId(path: string): string {
+  return "file-" + path.replace(/[^a-zA-Z0-9]+/g, "-");
+}
+
 // Language hint for syntax highlighting, derived from file extension.
 export function languageFromPath(path: string): string {
   const ext = path.split(".").pop()?.toLowerCase() ?? "";

@@ -12,7 +12,7 @@ import {
 import "react-diff-view/style/index.css";
 import "./diff-theme.css";
 import type { DiffFile, Side } from "@/lib/types";
-import { buildUnifiedDiff, languageFromPath } from "@/lib/diff";
+import { buildUnifiedDiff, languageFromPath, fileAnchorId } from "@/lib/diff";
 import { highlightHunks } from "@/lib/highlight";
 import { changeToAnchor, hunkToText, type DiffHunk } from "@/lib/diff-anchor";
 import ThreadPanel, { type ThreadAnchor } from "@/components/thread/ThreadPanel";
@@ -52,6 +52,7 @@ export default function FileDiff({
   );
 
   const [threads, setThreads] = useState<ThreadDTO[]>(threadsForFile);
+  const [collapsed, setCollapsed] = useState(false);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [composer, setComposer] = useState<{
     changeKey: string;
@@ -86,6 +87,8 @@ export default function FileDiff({
   const onGutterClick = (args: { change: ChangeData | null }) => {
     const change = args.change;
     if (!change) return;
+    // Don't hijack text selection (clicking anywhere on a line also fires this).
+    if (typeof window !== "undefined" && window.getSelection()?.toString()) return;
     const a = changeToAnchor(change as never);
     const key = sideLineKey(a.side, a.line);
     const entry = changeIndex.get(key);
@@ -176,15 +179,28 @@ export default function FileDiff({
   }
 
   return (
-    <section className="overflow-hidden rounded-lg border border-black/10 dark:border-white/15">
-      <div className="flex items-center justify-between bg-black/[0.03] px-3 py-2 text-sm dark:bg-white/[0.04]">
-        <span className="font-mono">{file.filename}</span>
-        <span className="text-xs text-black/50 dark:text-white/50">
-          +{file.additions} −{file.deletions}
+    <section
+      id={fileAnchorId(file.filename)}
+      className="scroll-mt-4 overflow-hidden rounded-lg border border-black/10 dark:border-white/15"
+    >
+      <div className="flex items-center justify-between gap-2 bg-black/[0.03] px-3 py-2 text-sm dark:bg-white/[0.04]">
+        <button
+          onClick={() => setCollapsed((c) => !c)}
+          className="flex min-w-0 items-center gap-2"
+          title={collapsed ? "Expand" : "Collapse"}
+        >
+          <span className="text-black/40 dark:text-white/40">
+            {collapsed ? "▶" : "▼"}
+          </span>
+          <span className="truncate font-mono">{file.filename}</span>
+        </button>
+        <span className="shrink-0 text-xs text-black/50 dark:text-white/50">
+          <span className="text-green-600 dark:text-green-400">+{file.additions}</span>{" "}
+          <span className="text-red-600 dark:text-red-400">−{file.deletions}</span>
         </span>
       </div>
 
-      {!parsed ? (
+      {collapsed ? null : !parsed ? (
         <div className="px-3 py-4 text-sm text-black/50 dark:text-white/50">
           No textual diff available (binary or too large).
         </div>
@@ -198,13 +214,14 @@ export default function FileDiff({
             widgets={widgets}
             gutterType="default"
             gutterEvents={{ onClick: onGutterClick }}
+            codeEvents={{ onClick: onGutterClick }}
           >
             {(hunks) => hunks.map((h) => <Hunk key={h.content} hunk={h} />)}
           </Diff>
         </div>
       )}
 
-      {orphanThreads.length > 0 && (
+      {!collapsed && orphanThreads.length > 0 && (
         <div className="border-t border-black/10 px-3 py-2 dark:border-white/15">
           <p className="mb-1 text-xs font-medium text-amber-700 dark:text-amber-400">
             Outdated threads (line no longer in the current diff)
