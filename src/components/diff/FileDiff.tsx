@@ -218,13 +218,6 @@ export default function FileDiff({
             gutterType="default"
             gutterEvents={{ onClick: onGutterClick }}
             codeEvents={{ onClick: onGutterClick }}
-            renderGutter={({ inHoverState, renderDefault }) =>
-              inHoverState ? (
-                <span className="font-bold text-blue-600 dark:text-blue-400">+</span>
-              ) : (
-                renderDefault()
-              )
-            }
           >
             {(hunks) => hunks.map((h) => <Hunk key={h.content} hunk={h} />)}
           </Diff>

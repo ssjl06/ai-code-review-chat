@@ -7,7 +7,30 @@
  * overrides to `.diff-wrapper` (the container in FileDiff) so they win on the
  * diff subtree regardless of stylesheet load order.
  */
+/* GitHub-like "+" affordance on gutter hover — pure CSS so it never triggers a
+   React re-render (re-renders here can interrupt IME composition in the open
+   chat box). On hover the line number is hidden and a blue "+" is overlaid. */
+.diff-wrapper td.diff-gutter {
+  position: relative;
+}
+.diff-wrapper td.diff-gutter:hover {
+  color: transparent;
+}
+.diff-wrapper td.diff-gutter:hover::after {
+  content: "+";
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  color: #2563eb;
+}
+
 @media (prefers-color-scheme: dark) {
+  .diff-wrapper td.diff-gutter:hover::after {
+    color: #60a5fa;
+  }
+
   .diff-wrapper {
     --diff-text-color: #e6edf3;
     --diff-background-color: transparent;

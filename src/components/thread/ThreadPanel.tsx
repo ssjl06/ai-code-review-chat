@@ -194,6 +194,8 @@ export default function ThreadPanel({
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => {
+            // Don't act while an IME (Korean/Japanese/Chinese) is composing.
+            if (e.nativeEvent.isComposing) return;
             if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
               e.preventDefault();
               send();
